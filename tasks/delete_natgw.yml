@@ -1,0 +1,34 @@
+---
+- name: Get NATGW facts
+  include_tasks: "get_natgw_facts.yml"
+  vars:
+    natgw_tag: "{{ natgw.aws_natgw_tag | upper }}"
+
+- name: Delete NAT Gateway and its associations
+  block:
+    # Ansible 2.4: module ec2_vpc_route_table_facts does not return the NAT Gateway ID with the CIDR block
+    - name: Find Route Table associations
+      command: 'aws ec2 describe-route-tables --filters Name="route.nat-gateway-id",Values="{{ natgw_facts.result[0].nat_gateway_id }}" --output json'
+      changed_when: False
+      register: results
+
+    - name: Get Route Table routes
+      set_fact:
+        rt_routes: "{{ (results.stdout | from_json ).RouteTables[0].Routes }}"
+      when: (results.stdout | from_json ).RouteTables != []
+
+    - name: Delete Route Table association
+      command: 'aws ec2 delete-route --route-table-id {{ (results.stdout | from_json ).RouteTables[0].RouteTableId }} --destination-cidr-block {{ item.DestinationCidrBlock }}'
+      with_items: rt_routes
+      when: ((item | to_json ).find(natgw_facts.result[0].nat_gateway_id)) != -1
+
+    - name: Delete NAT Gateway {{ natgw.aws_natgw_tag | upper }}
+      ec2_vpc_nat_gateway:
+        state: absent
+        region: "{{ natgw.aws_natgw_region }}"
+        wait: yes
+        nat_gateway_id: "{{ natgw_facts.result[0].nat_gateway_id }}"
+        release_eip: yes
+        wait_timeout: 500
+  when: natgw_facts.result != []
+...

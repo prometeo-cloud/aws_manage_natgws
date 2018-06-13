@@ -1,0 +1,42 @@
+---
+- name: Get Subnet facts
+  include_role:
+    name: "aws_manage_subnets"
+    tasks_from: "get_subnet_facts"
+  vars:
+    subnet_tag: "{{ natgw.aws_natgw_subnet }}"
+
+- name: Create NAT gateway {{ natgw.aws_natgw_tag | upper }}
+  ec2_vpc_nat_gateway:
+    aws_access_key: "{{ aws_access_key | default(omit) }}"
+    aws_secret_key: "{{ aws_secret_key | default(omit) }}"
+    if_exist_do_not_create: true
+    region: "{{ natgw.aws_natgw_region }}"
+    subnet_id: "{{ subnet_facts.subnets[0].id }}"
+    state: present
+    wait: yes
+    wait_timeout: 900
+  register: nat_gateway
+
+- name: Set resource name
+  set_fact:
+    resource_name: "{{ natgw.aws_natgw_tag | upper }}"
+
+# TODO Ansible 2.4 - ec2_vpc_nat_gateway module does not accept tags parameter - use cli to add tags to NAT Gateway
+- name: Tag NAT gateway {{ natgw.aws_natgw_tag | upper }}
+  command: "aws ec2 create-tags --resources {{ nat_gateway.nat_gateway_id }} --tags Key=\"{{ item.0 }}\",Value=\"{{ item.1 }}\""
+  with_together:
+    - "{{ resource_tags | list }}"
+    - "{{ resource_tags.values() | list }}"
+  when: (nat_gateway | to_json ).find((natgw.aws_natgw_tag)) == -1
+
+- name: Tag Elastic IP Address allocated to NAT Gateway
+  command: "aws ec2 create-tags --resources {{ nat_gateway.nat_gateway_addresses[0].allocation_id }} --tags Key=\"{{ item.0 }}\",Value=\"{{ item.1 }}\""
+  with_together:
+    - "{{ resource_tags | list }}"
+    - "{{ resource_tags.values() | list }}"
+  when:
+    - nat_gateway.nat_gateway_addresses[0].allocation_id != ""
+    - (nat_gateway | to_json ).find((natgw.aws_natgw_tag)) == -1
+
+...

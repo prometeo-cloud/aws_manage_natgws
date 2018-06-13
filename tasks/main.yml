@@ -1,0 +1,17 @@
+---
+- name: Create NAT Gateways
+  include_tasks: create_natgw.yml
+  with_items:
+    - "{{ aws_natgws }}"
+  loop_control:
+    loop_var: natgw
+  when: (arg_action is not defined) or (arg_action != 'delete')
+
+- name: Delete NAT Gateways
+  include_tasks: delete_natgw.yml
+  with_items:
+    - "{{ aws_natgws }}"
+  loop_control:
+    loop_var: natgw
+  when: (arg_action is defined) and (arg_action == 'delete')
+...

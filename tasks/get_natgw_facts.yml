@@ -1,0 +1,9 @@
+---
+- name: Get NAT Gateway facts
+  ec2_vpc_nat_gateway_facts:
+    region: "{{ nat_gateway_region | default(aws_region) }}"
+    filters:
+      tag-value: "{{ natgw_tag }}"
+      state: ['available']
+  register: natgw_facts
+...
